@@ -3,25 +3,23 @@
 Lang   : Micropython 
 Tested : 1.8 and 1.9.3
 
-<b>Description</b> : WiFi manager for ESP8266 - ESP12 - ESP32 for micropython 
+WiFi manager for ESP8266 - ESP12 - ESP32 written in micropython 
 
-<b>Main Features:</b>
+Based on [tayfunulu's WifiManager](https://github.com/tayfunulu/WiFiManager), but incorporates [jczic's MicroDNSSrv](https://github.com/jczic/MicroDNSSrv) to create a captive portal by default so users don't have to know the access point's IP Address.
 
-- Web based connection manager 
-- Save wifi password in "wifi.dat" (csv format) 
+# Main Features
+
+- Web based connection manager with captive portal
+- Save wifi password in `wifi.dat` (csv format)
 - Easy to apply 
 
-<b>Usage:</b>
+# Usage
 
-Upload main.py and wifimgr.py to ESP. 
-Write your code into main.py or import it from main.py. 
+Upload `wifimgr.py` and `main.py` to board and write code at the end of `main.py`
 
-<b>Logic:</b>
-1. step: Check "wifi.dat" file and try saved networks/passwords.
-2. step: Publish web page to configure new wifi. 
-3. step: Save network/password to "wifi.dat" file. 
-4. step: Run user code.
+# Logic
 
-![alt text](https://github.com/tayfunulu/WiFiManager/blob/master/WiFi_Manager.png)
-
-**web server based on code of CPOPP - https://github.com/cpopp/MicroPythonSamples
+1. Check `wifi.dat` file and try saved networks/passwords
+2. Host Access Point and redirect all traffic to website (captive portal)
+3. User can then provide the network password which is saved to `wifi.dat`
+4. Run user code

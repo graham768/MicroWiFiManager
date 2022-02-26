@@ -2,10 +2,7 @@ import network
 import socket
 import ure
 import time
-
-ap_ssid = "WifiManager"
-ap_password = "tayfunulu"
-ap_authmode = 3  # WPA2
+from microDNSSrv import MicroDNSSrv
 
 NETWORK_PROFILES = 'wifi.dat'
 
@@ -14,52 +11,122 @@ wlan_sta = network.WLAN(network.STA_IF)
 
 server_socket = None
 
+class WifiManager:
 
-def get_connection():
-    """return a working WLAN(STA_IF) instance or None"""
+    # authmodes: 0=open, 1=WEP, 2=WPA-PSK, 3=WPA2-PSK, 4=WPA/WPA2-PSK
+    def __init__(self, ssid='WifiManager', password='', authmode=0):
+        self.ssid = ssid
+        self.password = password
+        self.authmode = authmode
 
-    # First check if there already is any connection:
-    if wlan_sta.isconnected():
-        return wlan_sta
+    
+    def start(self, port=80):
+        global server_socket
 
-    connected = False
-    try:
-        # ESP connecting to WiFi takes time, wait a bit and try again:
-        time.sleep(3)
+        addr = socket.getaddrinfo('0.0.0.0', port)[0][-1]
+
+        stop()
+
+        wlan_sta.active(True)
+        wlan_ap.active(True)
+
+        wlan_ap.config(essid=self.ssid, password=self.password, authmode=self.authmode)
+
+        server_socket = socket.socket()
+        server_socket.bind(addr)
+        server_socket.listen(1)
+
+        mdns = MicroDNSSrv.Create({ '*' : '192.168.0.254' })
+
+        print('Connect to WiFi ssid ' + self.ssid + ', default password: ' + self.password)
+        print('and open browser window (captive portal should redirect)')
+        print('Listening on:', addr)
+
+        while True:
+            if wlan_sta.isconnected():
+                return True
+
+            client, addr = server_socket.accept()
+            print('client connected from', addr)
+            try:
+                client.settimeout(5.0)
+
+                request = b""
+                try:
+                    while "\r\n\r\n" not in request:
+                        request += client.recv(512)
+                except OSError:
+                    pass
+
+                print("Request is: {}".format(request))
+                if "HTTP" not in request:  # skip invalid requests
+                    continue
+
+                # version 1.9 compatibility
+                try:
+                    url = ure.search("(?:GET|POST) /(.*?)(?:\\?.*?)? HTTP", request).group(1).decode("utf-8").rstrip("/")
+                except Exception:
+                    url = ure.search("(?:GET|POST) /(.*?)(?:\\?.*?)? HTTP", request).group(1).rstrip("/")
+                print("URL is {}".format(url))
+
+                if url == "":
+                    handle_root(client)
+                elif url == "configure":
+                    handle_configure(client, request)
+                else:
+                    handle_not_found(client, url)
+
+            finally:
+                client.close()
+                mdns.Stop()
+
+
+
+    def get_connection(self):
+        """return a working WLAN(STA_IF) instance or None"""
+
+        # First check if there already is any connection:
         if wlan_sta.isconnected():
             return wlan_sta
 
-        # Read known network profiles from file
-        profiles = read_profiles()
+        connected = False
+        try:
+            # ESP connecting to WiFi takes time, wait a bit and try again:
+            time.sleep(3)
+            if wlan_sta.isconnected():
+                return wlan_sta
 
-        # Search WiFis in range
-        wlan_sta.active(True)
-        networks = wlan_sta.scan()
+            # Read known network profiles from file
+            profiles = read_profiles()
 
-        AUTHMODE = {0: "open", 1: "WEP", 2: "WPA-PSK", 3: "WPA2-PSK", 4: "WPA/WPA2-PSK"}
-        for ssid, bssid, channel, rssi, authmode, hidden in sorted(networks, key=lambda x: x[3], reverse=True):
-            ssid = ssid.decode('utf-8')
-            encrypted = authmode > 0
-            print("ssid: %s chan: %d rssi: %d authmode: %s" % (ssid, channel, rssi, AUTHMODE.get(authmode, '?')))
-            if encrypted:
-                if ssid in profiles:
-                    password = profiles[ssid]
-                    connected = do_connect(ssid, password)
-                else:
-                    print("skipping unknown encrypted network")
-            else:  # open
-                connected = do_connect(ssid, None)
-            if connected:
-                break
+            # Search WiFis in range
+            wlan_sta.active(True)
+            networks = wlan_sta.scan()
 
-    except OSError as e:
-        print("exception", str(e))
+            AUTHMODE = {0: "open", 1: "WEP", 2: "WPA-PSK", 3: "WPA2-PSK", 4: "WPA/WPA2-PSK"}
+            for ssid, bssid, channel, rssi, authmode, hidden in sorted(networks, key=lambda x: x[3], reverse=True):
+                ssid = ssid.decode('utf-8')
+                encrypted = authmode > 0
+                print("ssid: %s chan: %d rssi: %d authmode: %s" % (ssid, channel, rssi, AUTHMODE.get(authmode, '?')))
+                if encrypted:
+                    if ssid in profiles:
+                        password = profiles[ssid]
+                        connected = do_connect(ssid, password)
+                    else:
+                        print("skipping unknown encrypted network")
+                else:  # open
+                    connected = do_connect(ssid, None)
+                if connected:
+                    break
 
-    # start web server for connection manager:
-    if not connected:
-        connected = start()
+        except OSError as e:
+            print("exception", str(e))
 
-    return wlan_sta if connected else None
+        # start web server for connection manager:
+        if not connected:
+            connected = self.start()
+
+        return wlan_sta if connected else None
 
 
 def read_profiles():
@@ -103,7 +170,7 @@ def send_header(client, status_code=200, content_length=None ):
     client.sendall("HTTP/1.0 {} OK\r\n".format(status_code))
     client.sendall("Content-Type: text/html\r\n")
     if content_length is not None:
-      client.sendall("Content-Length: {}\r\n".format(content_length))
+        client.sendall("Content-Length: {}\r\n".format(content_length))
     client.sendall("\r\n")
 
 
@@ -252,60 +319,3 @@ def stop():
         server_socket.close()
         server_socket = None
 
-
-def start(port=80):
-    global server_socket
-
-    addr = socket.getaddrinfo('0.0.0.0', port)[0][-1]
-
-    stop()
-
-    wlan_sta.active(True)
-    wlan_ap.active(True)
-
-    wlan_ap.config(essid=ap_ssid, password=ap_password, authmode=ap_authmode)
-
-    server_socket = socket.socket()
-    server_socket.bind(addr)
-    server_socket.listen(1)
-
-    print('Connect to WiFi ssid ' + ap_ssid + ', default password: ' + ap_password)
-    print('and access the ESP via your favorite web browser at 192.168.4.1.')
-    print('Listening on:', addr)
-
-    while True:
-        if wlan_sta.isconnected():
-            return True
-
-        client, addr = server_socket.accept()
-        print('client connected from', addr)
-        try:
-            client.settimeout(5.0)
-
-            request = b""
-            try:
-                while "\r\n\r\n" not in request:
-                    request += client.recv(512)
-            except OSError:
-                pass
-
-            print("Request is: {}".format(request))
-            if "HTTP" not in request:  # skip invalid requests
-                continue
-
-            # version 1.9 compatibility
-            try:
-                url = ure.search("(?:GET|POST) /(.*?)(?:\\?.*?)? HTTP", request).group(1).decode("utf-8").rstrip("/")
-            except Exception:
-                url = ure.search("(?:GET|POST) /(.*?)(?:\\?.*?)? HTTP", request).group(1).rstrip("/")
-            print("URL is {}".format(url))
-
-            if url == "":
-                handle_root(client)
-            elif url == "configure":
-                handle_configure(client, request)
-            else:
-                handle_not_found(client, url)
-
-        finally:
-            client.close()
