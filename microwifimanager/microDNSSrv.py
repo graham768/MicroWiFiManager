@@ -129,19 +129,24 @@ class MicroDNSSrv :
         while True :
             try :
                 packet, cliAddr = self._server.recvfrom(256)
+                print(cliAddr)
                 domName = MicroDNSSrv._getAskedDomainName(packet)
                 if domName :
+                    print(f"Got domain: {domName}")
                     domName = domName.lower()
                     ipB = self._domList.get(domName, None)
                     if not ipB :
                         for domChk in self._domList.keys() :
                             if domChk.find('*') >= 0 :
                                 r = domChk.replace('.', '\.').replace('*', '.*') + '$'
+                                print(r)
                                 if match(r, domName) :
                                     ipB = self._domList.get(domChk, None)
                                     break
                         if not ipB :
+                            print(f"Rerouting to: {ipB}")
                             ipB = self._domList.get('*', None)
+                            
                     if ipB :
                         packet = MicroDNSSrv._getPacketAnswerA(packet, ipB)
                         if packet :
@@ -157,8 +162,8 @@ class MicroDNSSrv :
     def Start(self) :
         if not self._started :
             self._server = socket.socket(socket.AF_INET,
-                                          socket.SOCK_DGRAM,
-                                          socket.IPPROTO_UDP )
+                                            socket.SOCK_DGRAM,
+                                            socket.IPPROTO_UDP )
             self._server.setsockopt(socket.SOL_SOCKET,
                                     socket.SO_REUSEADDR,
                                     1 )
