@@ -10,8 +10,6 @@ NETWORK_PROFILES = 'wifi.dat'
 wlan_ap = network.WLAN(network.AP_IF)
 wlan_sta = network.WLAN(network.STA_IF)
 
-server_socket = None
-
 class WifiManager:
 
     # authmodes: 0=open, 1=WEP, 2=WPA-PSK, 3=WPA2-PSK, 4=WPA/WPA2-PSK
@@ -19,78 +17,7 @@ class WifiManager:
         self.ssid = ssid
         self.password = password
         self.authmode = authmode
-
-    
-    def start(self, port=80):
-        global server_socket
-
-        addr = socket.getaddrinfo('0.0.0.0', port)[0][-1]
-
-        stop()
-
-        wlan_sta.active(True)
-        wlan_ap.active(True)
-
-        wlan_ap.config(essid=self.ssid, password=self.password, authmode=self.authmode)
-
-        server_socket = socket.socket()
-        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server_socket.bind(addr)
-        server_socket.listen(1)
-
-        mdns = MicroDNSSrv.Create({ '*' : '192.168.4.1' })
-
-        print('Connect to WiFi ssid ' + self.ssid + ', default password: ' + self.password)
-        print('and open browser window (captive portal should redirect)')
-        print('Listening on:', addr)
-
-        while True:
-            if wlan_sta.isconnected():
-                return True
-
-            client, addr = server_socket.accept()
-            print('client connected from', addr)
-            try:
-                client.settimeout(5.0)
-
-                request = b""
-                try:
-                    while "\r\n\r\n" not in request:
-                        request += client.recv(512)
-                except OSError:
-                    pass
-
-                print("Request is: {}".format(request))
-                if "HTTP" not in request:  # skip invalid requests
-                    continue
-
-                # version 1.9 compatibility
-                try:
-                    url = ure.search("(?:GET|POST) /(.*?)(?:\\?.*?)? HTTP", request).group(1).decode("utf-8").rstrip("/")
-                except Exception:
-                    url = ure.search("(?:GET|POST) /(.*?)(?:\\?.*?)? HTTP", request).group(1).rstrip("/")
-                print("URL is {}".format(url))
-
-
-                # TODO getting "generate_204 as address"
-                if url == "configure":
-                    handle_configure(client, request)
-                else:
-                    handle_root(client)
-
-                # if url == "":
-                #     handle_root(client)
-                # elif url == "configure":
-                #     handle_configure(client, request)
-                # else:
-                #     handle_not_found(client, url)
-
-            finally:
-                client.close()
-                stop()
-                mdns.Stop()
-
-
+        self.server_socket = None
 
     def get_connection(self):
         """return a working WLAN(STA_IF) instance or None"""
@@ -137,6 +64,73 @@ class WifiManager:
             connected = self.start()
 
         return wlan_sta if connected else None
+
+
+    def stop(self):
+        if self.server_socket:
+            self.server_socket.close()
+            self.server_socket = None
+
+    
+    def start(self, port=80):
+
+        addr = socket.getaddrinfo('0.0.0.0', port)[0][-1]
+
+        self.stop()
+
+        wlan_sta.active(True)
+        wlan_ap.active(True)
+
+        wlan_ap.config(essid=self.ssid, password=self.password, authmode=self.authmode)
+
+        self.server_socket = socket.socket()
+        self.server_socket.bind(addr)
+        self.server_socket.listen(1)
+
+        mdns = MicroDNSSrv.Create({ '*' : '192.168.4.1' })
+
+        print('Connect to WiFi ssid ' + self.ssid + ', default password: ' + self.password)
+        print('and open browser window (captive portal should redirect)')
+        print('Listening on:', addr)
+
+        while True:
+            if wlan_sta.isconnected():
+                mdns.Stop()
+                self.stop()
+                return True
+
+            client, addr = self.server_socket.accept()
+            print('client connected from', addr)
+            try:
+                client.settimeout(5.0)
+
+                request = b""
+                try:
+                    while "\r\n\r\n" not in request:
+                        request += client.recv(512)
+                except OSError:
+                    pass
+
+                print("Request is: {}".format(request))
+                if "HTTP" not in request:  # skip invalid requests
+                    continue
+
+                # version 1.9 compatibility
+                try:
+                    url = ure.search("(?:GET|POST) /(.*?)(?:\\?.*?)? HTTP", request).group(1).decode("utf-8").rstrip("/")
+                except Exception:
+                    url = ure.search("(?:GET|POST) /(.*?)(?:\\?.*?)? HTTP", request).group(1).rstrip("/")
+                print("URL is {}".format(url))
+
+
+                # TODO getting "generate_204 as address"
+                if url == "configure":
+                    handle_configure(client, request)
+                else:
+                    handle_root(client)
+
+            finally:
+                client.close()
 
 
 def read_profiles():
@@ -210,13 +204,13 @@ def handle_root(client):
         """)
         while len(ssids):
             ssid = ssids.pop(0)
-            client.sendall("""\
+            client.sendall(f"""\
                             <tr>
                                 <td colspan="2">
-                                    <input type="radio" name="ssid" value="{0}" />{0}
+                                    <input type="radio" name="ssid" value="{ssid}" />{ssid}
                                 </td>
                             </tr>
-            """.format(ssid))
+            """)
         client.sendall("""\
                             <tr>
                                 <td>Password:</td>
@@ -228,31 +222,8 @@ def handle_root(client):
                         <input type="submit" value="Submit" />
                     </p>
                 </form>
-                <p>&nbsp;</p>
-                <hr />
-                <h5>
-                    <span style="color: #ff0000;">
-                        Your ssid and password information will be saved into the
-                        "%(filename)s" file in your ESP module for future usage.
-                        Be careful about security!
-                    </span>
-                </h5>
-                <hr />
-                <h2 style="color: #2e6c80;">
-                    Some useful infos:
-                </h2>
-                <ul>
-                    <li>
-                        Original code from <a href="https://github.com/cpopp/MicroPythonSamples"
-                            target="_blank" rel="noopener">cpopp/MicroPythonSamples</a>.
-                    </li>
-                    <li>
-                        This code available at <a href="https://github.com/tayfunulu/WiFiManager"
-                            target="_blank" rel="noopener">tayfunulu/WiFiManager</a>.
-                    </li>
-                </ul>
             </html>
-        """ % dict(filename=NETWORK_PROFILES))
+        """)
         client.close()
     except Exception as e:
         if e.errno == errno.ECONNRESET:
@@ -321,16 +292,3 @@ def handle_configure(client, request):
         """ % dict(ssid=ssid)
         send_response(client, response)
         return False
-
-
-def handle_not_found(client, url):
-    send_response(client, "Path not found: {}".format(url), status_code=404)
-
-
-def stop():
-    global server_socket
-
-    if server_socket:
-        server_socket.close()
-        server_socket = None
-

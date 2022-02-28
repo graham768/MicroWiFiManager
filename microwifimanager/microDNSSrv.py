@@ -129,17 +129,14 @@ class MicroDNSSrv :
         while True :
             try :
                 packet, cliAddr = self._server.recvfrom(256)
-                print(cliAddr)
                 domName = MicroDNSSrv._getAskedDomainName(packet)
                 if domName :
-                    print(f"Got domain: {domName}")
                     domName = domName.lower()
                     ipB = self._domList.get(domName, None)
                     if not ipB :
                         for domChk in self._domList.keys() :
                             if domChk.find('*') >= 0 :
                                 r = domChk.replace('.', '\.').replace('*', '.*') + '$'
-                                print(r)
                                 if match(r, domName) :
                                     ipB = self._domList.get(domChk, None)
                                     break
