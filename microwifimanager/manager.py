@@ -3,7 +3,7 @@ import socket
 import ure
 import time
 import errno
-from microDNSSrv import MicroDNSSrv
+from microwifimanager.microDNSSrv import MicroDNSSrv
 
 NETWORK_PROFILES = 'wifi.dat'
 

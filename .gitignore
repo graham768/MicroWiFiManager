@@ -1,4 +1,5 @@
 .idea/
 dist/
+*.egg-info
 __pycache__/
 MANIFEST
