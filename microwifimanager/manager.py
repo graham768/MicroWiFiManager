@@ -95,8 +95,11 @@ class WifiManager:
 
         while True:
             if wlan_sta.isconnected():
+                # Allow confirmation page to display before shutting down network
+                time.sleep(3)
                 mdns.Stop()
                 self.stop()
+                wlan_ap.active(False)
                 return True
 
             client, addr = self.server_socket.accept()
