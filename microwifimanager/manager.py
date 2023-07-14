@@ -114,6 +114,13 @@ class WifiManager:
                 except OSError:
                     pass
 
+                # Handle form data from Safari on macOS and iOS; it sends \r\n\r\nssid=<ssid>&password=<password>
+                try:
+                    request += client.recv(1024)
+                    print("Received form data after \\r\\n\\r\\n(i.e. from Safari on macOS or iOS)")
+                except OSError:
+                    pass
+
                 print("Request is: {}".format(request))
                 if "HTTP" not in request:  # skip invalid requests
                     continue
@@ -160,7 +167,7 @@ def do_connect(ssid, password):
         return None
     print('Trying to connect to %s...' % ssid)
     wlan_sta.connect(ssid, password)
-    for retry in range(100):
+    for retry in range(200):
         connected = wlan_sta.isconnected()
         if connected:
             break
