@@ -249,11 +249,11 @@ def handle_configure(client, request):
         return False
     # version 1.9 compatibility
     try:
-        ssid = match.group(1).decode("utf-8").replace("%3F", "?").replace("%21", "!").replace("+"," ")
-        password = match.group(2).decode("utf-8").replace("%3F", "?").replace("%21", "!")
+        ssid = match.group(1).decode("utf-8").replace("%3F", "?").replace("%21", "!").replace("+"," ").replace("%26", "&")
+        password = match.group(2).decode("utf-8").replace("%3F", "?").replace("%21", "!").replace("%26", "&")
     except Exception:
-        ssid = match.group(1).replace("%3F", "?").replace("%21", "!").replace("+"," ")
-        password = match.group(2).replace("%3F", "?").replace("%21", "!")
+        ssid = match.group(1).replace("%3F", "?").replace("%21", "!").replace("+"," ").replace("%26", "&")
+        password = match.group(2).replace("%3F", "?").replace("%21", "!").replace("%26", "&")
 
     if len(ssid) == 0:
         send_response(client, "SSID must be provided", status_code=400)
