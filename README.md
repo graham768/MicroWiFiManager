@@ -6,19 +6,20 @@ Based on tayfunulu's [WifiManager](https://github.com/tayfunulu/WiFiManager), bu
 
 # Installation
 
-## Installation with upip
+## Installation with `mip`
 
-> ⚠ Note: if you are using this package with OTA updates, be sure to avoid overwriting `lib/` where upip installs packages.
+`mip` is the MicroPython built-in package manager similar to python's `pip`. For more details see [MicroPython package management](https://docs.micropython.org/en/latest/reference/packages.html#package-management)
 
-From micropython command line run
+From micropython command line run:
 ```
-import upip
-upip.install("micro-wifi-manager")
+import mip
+mip.install("github:graham768/MicroWiFiManager")
 ```
 
 ## Manual Installation
 
 Copy the `microwifimanager/` directory to your device and refer to `main.py` for usage
+
 # Main Features
 
 - Easily setup device's WiFi connection from phone or computer
